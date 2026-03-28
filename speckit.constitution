@@ -1,0 +1,134 @@
+# Speckit Constitution
+
+## Purpose
+
+Aura JSON Studio exists to turn raw JSON into a trustworthy, beautiful, and highly operable reading experience.
+Every change should improve at least one of these outcomes:
+
+1. Parsing reliability
+2. Visual clarity
+3. Structural control
+4. Copy efficiency
+5. User confidence
+
+## Non-Negotiable Product Principles
+
+### 1. Next.js First
+
+- The site should remain a Next.js application unless a migration is explicitly justified.
+- New UI work should align with the App Router architecture already used in this project.
+- Features should favor static or client-light patterns when possible, while preserving interaction quality.
+
+### 2. Premium Visual Quality
+
+- The interface must feel intentional, editorial, and polished rather than generic.
+- Visual hierarchy must be obvious at a glance: input, output, status, and actions should never compete equally.
+- Mobile and desktop should both feel designed, not merely "responsive enough."
+- Decorative treatment must never reduce readability of JSON content.
+
+### 3. Formatting Must Be Safe
+
+- Formatting must never silently alter valid JSON semantics.
+- Sanitization may remove or normalize known invisible or hostile characters only when the action is predictable.
+- Any cleanup performed before parsing should be surfaced to the user in plain language.
+- Parse failures must return clear feedback instead of vague error states.
+
+### 4. Structure Is The Core Product
+
+- The formatted result is not just pretty-printed text; it is a navigable structure.
+- Users must be able to inspect nested content by level, collapse branches freely, and regain orientation quickly.
+- Path and depth context should be preserved wherever it helps local reasoning and copying.
+
+### 5. Copying Must Work At Multiple Scopes
+
+- Full-result copy is mandatory.
+- Single-node copy is mandatory.
+- Primitive-value copy is mandatory where relevant.
+- Copy actions should be obvious, fast, and provide immediate confirmation.
+
+## Data Handling Rules
+
+- Support standard JSON objects, arrays, primitives, booleans, numbers, strings, and null.
+- Reject non-JSON syntax rather than guessing.
+- Treat these cleanup cases as first-class:
+  - BOM
+  - zero-width space
+  - zero-width joiner / non-joiner
+  - word joiner
+  - non-breaking space
+  - line separator
+  - paragraph separator
+- Expand cleanup coverage only when the behavior is deterministic and user-safe.
+
+## UX Rules
+
+- The paste area must always be immediately visible without extra clicks.
+- The formatted area must remain readable for both small snippets and deeply nested payloads.
+- Collapse and expand actions should feel local and reversible.
+- Empty, loading, success, and error states must each have a distinct and calm presentation.
+- Keyboard-friendly interactions are preferred when they do not complicate the primary flow.
+
+## Engineering Rules
+
+- Keep core JSON sanitization and formatting logic separate from presentation logic.
+- New utility behavior should live in reusable modules rather than inside UI components.
+- Preserve strict typing for JSON values and formatting results.
+- Avoid dependencies unless they materially improve correctness or user experience.
+- Build output must remain production-safe in offline or restricted-network environments.
+
+## Naming And Directory Conventions
+
+- File and directory names should use kebab-case in the form `xx-xx`.
+- New component files, utility files, and route segments should follow the same kebab-case rule consistently.
+- Names should describe responsibility directly and avoid vague words such as `helper`, `common`, or `temp`.
+- Directory structure should group code by role and state boundaries, not by arbitrary size.
+- Preferred top-level layout:
+  - `app/` for routes and page-level composition
+  - `components/` for reusable UI units
+  - `lib/` for pure logic and functional helpers
+  - `tests/` or colocated `*.test.ts(x)` files for automated tests
+
+## Component Design Principles
+
+- Follow the single responsibility principle for every component.
+- Components should be as abstract as practical without hiding important product behavior.
+- Component boundaries should map cleanly to React state boundaries whenever possible.
+- Stateful orchestration components should own coordination logic.
+- Presentational components should stay focused on rendering and user interaction contracts.
+- Move reusable state-independent logic into `lib/` instead of duplicating it across components.
+- Do not merge unrelated UI concerns into one component simply for convenience.
+
+## Testing Standard
+
+- Functional logic should be developed in TDD style whenever practical.
+- For pure functions, write or update tests before or alongside implementation changes.
+- Sanitization, parsing, path generation, and copy-related formatting helpers should be treated as high-priority test targets.
+- A feature is not complete if core functional behavior changes without corresponding automated test coverage.
+- Prefer deterministic tests that validate user-visible behavior over implementation trivia.
+
+## Deployment Standard
+
+- The project should be deployable on Vercel as the default hosting target.
+- Changes should preserve compatibility with standard Vercel Next.js deployment flows.
+- Avoid environment assumptions that only work on one local machine.
+- Build and runtime behavior should remain stable under serverless-style deployment constraints.
+
+## Performance Guardrails
+
+- FCP should be treated as a hard user-experience target and should ideally remain under 800 ms.
+- Any new feature that risks slowing initial paint must justify its cost clearly.
+- Prefer lightweight rendering paths and avoid blocking the first meaningful interface.
+- Expensive or potentially slow operations should surface a loading state instead of leaving the interface unresponsive.
+- Visual richness is encouraged, but never at the expense of startup speed and interaction stability.
+
+## Change Standard
+
+Any new feature should answer all of the following before it is considered complete:
+
+1. Does it preserve parse trust?
+2. Does it improve clarity or control?
+3. Does it degrade copy workflows?
+4. Does it remain elegant on mobile?
+5. Does it keep the codebase simple enough to evolve?
+
+If the answer to any of these is unclear, the feature is not finished.
