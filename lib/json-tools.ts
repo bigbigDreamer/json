@@ -12,21 +12,39 @@ type CleaningDetail = {
   count: number;
 };
 
-export type FormatSuccessResult = {
+type RootType = "array" | "object" | "primitive";
+
+export type TransformMode = "format" | "minify";
+
+export type TransformSuccessResult = {
   ok: true;
+  mode: TransformMode;
   cleanedCount: number;
   cleaningDetails: CleaningDetail[];
   data: JsonValue;
   formatted: string;
   formattedLineCount: number;
+  minified: string;
+  output: string;
+  outputLineCount: number;
   rootLabel: string;
-  rootType: "array" | "object" | "primitive";
+  rootType: RootType;
 };
 
-export type FormatErrorResult = {
+export type TransformErrorResult = {
   ok: false;
   message: string;
 };
+
+export type FormatSuccessResult = TransformSuccessResult & {
+  mode: "format";
+};
+
+export type MinifySuccessResult = TransformSuccessResult & {
+  mode: "minify";
+};
+
+export type FormatErrorResult = TransformErrorResult;
 
 const cleaningRules: CleaningRule[] = [
   { char: "\uFEFF", label: "BOM", replacement: "" },
@@ -94,38 +112,72 @@ function normalizeJsonValue(value: unknown): JsonValue {
   throw new Error("Only valid JSON values are supported.");
 }
 
-export function formatJsonInput(input: string): FormatSuccessResult | FormatErrorResult {
+function getRootMetadata(data: JsonValue) {
+  if (data === null || typeof data !== "object") {
+    return {
+      rootLabel: "root",
+      rootType: "primitive" as RootType,
+    };
+  }
+
+  if (Array.isArray(data)) {
+    return {
+      rootLabel: "root[]",
+      rootType: "array" as RootType,
+    };
+  }
+
+  return {
+    rootLabel: "root{}",
+    rootType: "object" as RootType,
+  };
+}
+
+function createErrorResult(message: string, cleanedCount: number): TransformErrorResult {
+  return {
+    ok: false,
+    message:
+      cleanedCount > 0
+        ? `${message}。已自动移除 ${cleanedCount} 个隐形字符，但内容仍不是合法 JSON。`
+        : message,
+  };
+}
+
+function buildTransformResult(mode: TransformMode, input: string): TransformSuccessResult | TransformErrorResult {
   const { cleaned, cleanedCount, cleaningDetails } = sanitizeJsonText(input);
 
   try {
     const data = normalizeJsonValue(JSON.parse(cleaned));
     const formatted = JSON.stringify(data, null, 2);
+    const minified = JSON.stringify(data);
+    const { rootLabel, rootType } = getRootMetadata(data);
 
     return {
       ok: true,
+      mode,
       cleanedCount,
       cleaningDetails,
       data,
       formatted,
       formattedLineCount: formatted.split("\n").length,
-      rootLabel: Array.isArray(data) ? "root[]" : typeof data === "object" ? "root{}" : "root",
-      rootType:
-        data === null || typeof data !== "object"
-          ? "primitive"
-          : Array.isArray(data)
-            ? "array"
-            : "object",
+      minified,
+      output: mode === "minify" ? minified : formatted,
+      outputLineCount: mode === "minify" ? 1 : formatted.split("\n").length,
+      rootLabel,
+      rootType,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知 JSON 解析错误";
-    return {
-      ok: false,
-      message:
-        cleanedCount > 0
-          ? `${message}。已自动移除 ${cleanedCount} 个隐形字符，但内容仍不是合法 JSON。`
-          : message,
-    };
+    return createErrorResult(message, cleanedCount);
   }
+}
+
+export function formatJsonInput(input: string): FormatSuccessResult | FormatErrorResult {
+  return buildTransformResult("format", input) as FormatSuccessResult | FormatErrorResult;
+}
+
+export function minifyJsonInput(input: string): MinifySuccessResult | TransformErrorResult {
+  return buildTransformResult("minify", input) as MinifySuccessResult | TransformErrorResult;
 }
 
 export function stringifyJsonValue(value: JsonValue) {
