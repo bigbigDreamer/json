@@ -1,2 +1,11 @@
 node_modules
 .next
+coverage
+dist
+build
+*.log
+.env*
+.DS_Store
+*.tmp
+*.swp
+*.tsbuildinfo
