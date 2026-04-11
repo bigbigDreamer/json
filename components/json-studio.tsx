@@ -76,14 +76,16 @@ function ActionButton({
   onClick,
   tone = "primary",
   className = "",
+  style,
 }: {
   children: ReactNode;
   onClick: () => void;
   tone?: "primary" | "secondary" | "ghost";
   className?: string;
+  style?: CSSProperties;
 }) {
   return (
-    <button className={`actionButton ${tone} ${className}`} onClick={onClick} type="button">
+    <button className={`actionButton ${tone} ${className}`} onClick={onClick} type="button" style={style}>
       {children}
     </button>
   );
