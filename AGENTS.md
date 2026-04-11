@@ -24,6 +24,3 @@ TypeScript 5.x on Node-compatible Next.js 15 App Router: Follow standard convent
 ## Recent Changes
 
 - 002-json-minify: Added TypeScript 5.x on Node-compatible Next.js 15 App Router + Next.js 15, React 19, React DOM 19
-
-<!-- MANUAL ADDITIONS START -->
-<!-- MANUAL ADDITIONS END -->

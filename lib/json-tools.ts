@@ -46,6 +46,13 @@ export type MinifySuccessResult = TransformSuccessResult & {
 
 export type FormatErrorResult = TransformErrorResult;
 
+export type RepairResult = {
+  ok: boolean;
+  repaired: string;
+  fixes: string[];
+  error?: string;
+};
+
 const cleaningRules: CleaningRule[] = [
   { char: "\uFEFF", label: "BOM", replacement: "" },
   { char: "\u200B", label: "零宽空格", replacement: "" },
@@ -178,6 +185,131 @@ export function formatJsonInput(input: string): FormatSuccessResult | FormatErro
 
 export function minifyJsonInput(input: string): MinifySuccessResult | TransformErrorResult {
   return buildTransformResult("minify", input) as MinifySuccessResult | TransformErrorResult;
+}
+
+export function repairJsonInput(input: string): RepairResult {
+  const sanitizeResult = sanitizeJsonText(input);
+  let current = sanitizeResult.cleaned;
+  const fixes: string[] = [];
+
+  if (sanitizeResult.cleanedCount > 0) {
+    fixes.push(`清理了 ${sanitizeResult.cleanedCount} 个高危隐藏字符`);
+  }
+
+  // 1. Chinese Quotes -> Double Quotes
+  const chineseQuotesFixed = current.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+  if (chineseQuotesFixed !== current) {
+    current = chineseQuotesFixed;
+    fixes.push("替换全角/中文引号");
+  }
+
+  // 2. Single Quotes -> Double Quotes (Restricted to token boundaries to avoid corrupting "It's")
+  const singleQuoteRegex = /([:,\[{]\s*)'((?:[^'\\]|\\.)*)'(\s*[:,}\]])/g;
+  let singleQuoteFixed = current;
+  let prevSingleQuoteFixed = "";
+  let sqChanged = false;
+  // Loop to handle adjacent/overlapping tokens securely (e.g. ['a','b'])
+  while (singleQuoteFixed !== prevSingleQuoteFixed) {
+    prevSingleQuoteFixed = singleQuoteFixed;
+    singleQuoteFixed = singleQuoteFixed.replace(singleQuoteRegex, (match, before, inner, after) => {
+      sqChanged = true;
+      return `${before}"${inner.replace(/"/g, '\\"')}"${after}`;
+    });
+  }
+  if (sqChanged) {
+    current = singleQuoteFixed;
+    fixes.push("将单引号替换为双引号");
+  }
+
+  // 3. Unquoted Keys -> Quoted Keys
+  const unquotedKeyRegex = /([{,]\s*)([A-Za-z_$][A-Za-z0-9_$]*)\s*:/g;
+  const unquotedKeyFixed = current.replace(unquotedKeyRegex, '$1"$2":');
+  if (unquotedKeyFixed !== current) {
+    current = unquotedKeyFixed;
+    fixes.push("为无引号的 Key 补充双引号");
+  }
+
+  // 4. Equal sign instead of colon
+  const equalColonRegex = /("[^"]*"\s*)=\s*(["{\[\d\w])/g;
+  const equalColonFixed = current.replace(equalColonRegex, '$1: $2');
+  if (equalColonFixed !== current) {
+    current = equalColonFixed;
+    fixes.push("将错误赋值等号 '=' 替换为冒号 ':'");
+  }
+
+  // 4.5. Unclosed strings at the end of a line
+  // Matches: `"value` or `"value,` hitting a newline or EOF, BUT restricts it to string openings by ensuring the quote is preceded by a line start, colon, comma, or bracket.
+  const unclosedStringRegex = /(^|[\[{,:]\s*)("\s*(?:[^"\r\n\\]|\\.)*?)(,)?\s*(\r?\n|$)/gm;
+  const unclosedStringFixed = current.replace(unclosedStringRegex, (match, before, inner, comma, newline) => {
+    return `${before}${inner}"${comma || ''}${newline}`;
+  });
+  if (unclosedStringFixed !== current) {
+    current = unclosedStringFixed;
+    fixes.push("在行末补全缺失的双引号");
+  }
+
+  // 5. Trailing Commas
+  const trailingCommaRegex = /,\s*([}\]])/g;
+  const trailingCommaFixed = current.replace(trailingCommaRegex, '$1');
+  if (trailingCommaFixed !== current) {
+    current = trailingCommaFixed;
+    fixes.push("移除尾随逗号");
+  }
+
+  // 6. Missing Commas between Elements
+  // Replaces: `"value" "nextKey"`-> `"value", "nextKey"`
+  // Replaces: `} {` -> `}, {`
+  const missingCommaRegex = /("|true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[}\]])(\s+)(?=["{\[tfn0-9-])/g;
+  const missingCommaFixed = current.replace(missingCommaRegex, '$1,$2');
+  if (missingCommaFixed !== current) {
+    current = missingCommaFixed;
+    fixes.push("在相邻元素间补充缺失的逗号");
+  }
+
+  // 7. Missing Closing Brackets at End
+  let stack: string[] = [];
+  let inString = false;
+  let escapeNext = false;
+  for (let i = 0; i < current.length; i++) {
+    const char = current[i];
+    if (escapeNext) { escapeNext = false; continue; }
+    if (char === '\\') { escapeNext = true; continue; }
+    if (char === '"') { inString = !inString; continue; }
+    if (!inString) {
+      if (char === '{') stack.push('}');
+      if (char === '[') stack.push(']');
+      if (char === '}' && stack[stack.length - 1] === '}') stack.pop();
+      if (char === ']' && stack[stack.length - 1] === ']') stack.pop();
+    }
+  }
+
+  if (stack.length > 0 || inString) {
+    if (inString) {
+      current += '"';
+      fixes.push("补充末尾缺失的双引号");
+    }
+    if (stack.length > 0) {
+      const appended = stack.reverse().join("");
+      current += appended;
+      fixes.push(`在末尾补全闭合括号 "${appended}"`);
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(current);
+    return {
+      ok: true,
+      repaired: JSON.stringify(parsed, null, 2),
+      fixes
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      repaired: current,
+      fixes,
+      error: e instanceof Error ? e.message : String(e)
+    };
+  }
 }
 
 export function stringifyJsonValue(value: JsonValue) {

@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, PointerEvent, ReactNode } from "react";
-import { startTransition, useMemo, useState } from "react";
+import { startTransition, useMemo, useState, useRef } from "react";
 import {
   createInvisibleCharacterSample,
   createSampleJson,
@@ -75,13 +75,15 @@ function ActionButton({
   children,
   onClick,
   tone = "primary",
+  className = "",
 }: {
   children: ReactNode;
   onClick: () => void;
   tone?: "primary" | "secondary" | "ghost";
+  className?: string;
 }) {
   return (
-    <button className={`actionButton ${tone}`} onClick={onClick} type="button">
+    <button className={`actionButton ${tone} ${className}`} onClick={onClick} type="button">
       {children}
     </button>
   );
@@ -117,13 +119,24 @@ function JsonTreeNode({
             <code className="treePath">{path}</code>
             <code className="treeValue">{stringifyJsonValue(node)}</code>
           </div>
-          <button
-            className="miniButton"
-            onClick={() => onCopy(stringifyJsonValue(node), token, "已复制值")}
-            type="button"
-          >
-            {copyLabel}
-          </button>
+          <div className="treeActions">
+            <button
+              className={`actionIcon ${copyState?.token === `${token}:value` ? "success" : ""}`}
+              onClick={() => onCopy(stringifyJsonValue(node), `${token}:value`, "已复制值")}
+              title="Copy Value"
+              type="button"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            </button>
+            <button
+              className={`actionIcon ${copyState?.token === `${token}:path` ? "success" : ""}`}
+              onClick={() => onCopy(path, `${token}:path`, "已复制路径")}
+              title="Copy Path"
+              type="button"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -164,13 +177,24 @@ function JsonTreeNode({
           </span>
           {collapsed ? <span className="treePreview">{getNodePreview(node)}</span> : null}
         </div>
-        <button
-          className="miniButton"
-          onClick={() => onCopy(JSON.stringify(node, null, 2), token, "已复制节点")}
-          type="button"
-        >
-          {copyLabel}
-        </button>
+        <div className="treeActions">
+          <button
+            className={`actionIcon ${copyState?.token === `${token}:node` ? "success" : ""}`}
+            onClick={() => onCopy(JSON.stringify(node, null, 2), `${token}:node`, "已复制节点")}
+            title="Copy Object/Array"
+            type="button"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
+          <button
+            className={`actionIcon ${copyState?.token === `${token}:path` ? "success" : ""}`}
+            onClick={() => onCopy(path, `${token}:path`, "已复制路径")}
+            title="Copy Path"
+            type="button"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          </button>
+        </div>
       </div>
 
       {!collapsed ? (
@@ -235,7 +259,44 @@ function Metrics({
   );
 }
 
+const highlightJsonSyntax = (code: string) => {
+  const escaped = code
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  
+  let depth = 0;
+
+  return escaped.replace(
+    /("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}[\]]/g,
+    (match, str, colon, boolNull) => {
+      if (str) {
+        if (colon) {
+          return `<span class="hl-key">${str}</span>${colon}`;
+        }
+        return `<span class="hl-string">${str}</span>`;
+      }
+      if (boolNull) {
+        return `<span class="hl-boolean">${match}</span>`;
+      }
+      if (match === "{" || match === "[") {
+        const currentDepth = depth % 3;
+        depth++;
+        return `<span class="hl-bracket hl-bracket-${currentDepth}">${match}</span>`;
+      }
+      if (match === "}" || match === "]") {
+        depth = Math.max(0, depth - 1);
+        const currentDepth = depth % 3;
+        return `<span class="hl-bracket hl-bracket-${currentDepth}">${match}</span>`;
+      }
+      return `<span class="hl-number">${match}</span>`;
+    }
+  );
+};
+
 export function JsonStudio() {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLPreElement>(null);
   const [input, setInput] = useState(initialInput);
   const [result, setResult] = useState<TransformSuccessResult | null>(
     initialResult.ok ? initialResult : null,
@@ -248,6 +309,9 @@ export function JsonStudio() {
   );
   const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(new Set());
   const [copyState, setCopyState] = useState<CopyState>(null);
+  const [leftWidthPercent, setLeftWidthPercent] = useState<number | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
+  const [repairStatus, setRepairStatus] = useState<{ active: boolean; message: string; success: boolean } | null>(null);
   const [dockPosition, setDockPosition] = useState<FloatingDockPosition>({ x: 0, y: 0 });
   const [dockDrag, setDockDrag] = useState<FloatingDockDrag>({
     active: false,
@@ -294,6 +358,13 @@ export function JsonStudio() {
     return `${cleanedSummary}。当前为结构化格式化结果，可直接浏览与复制。`;
   }, [cleanedSummary, error, result]);
 
+  const handleScroll = () => {
+    if (textareaRef.current && highlightRef.current) {
+      highlightRef.current.scrollTop = textareaRef.current.scrollTop;
+      highlightRef.current.scrollLeft = textareaRef.current.scrollLeft;
+    }
+  };
+
   const outputHeading = result?.mode === "minify" ? "压缩结果与结构树" : "结构树结果";
 
   const outputDescription =
@@ -326,6 +397,37 @@ export function JsonStudio() {
 
   const handleMinify = (nextInput = input) => {
     runTransform("minify", nextInput);
+  };
+
+  const handleAutoFix = async () => {
+    const { repairJsonInput } = await import("@/lib/json-tools");
+    startTransition(() => {
+      const repairResult = repairJsonInput(input);
+      
+      // ALONG AS IT CHANGED, APPLY IT! Even if imperfect, partial auto-fix is great UX
+      if (repairResult.repaired !== input) {
+        setInput(repairResult.repaired);
+      }
+
+      if (repairResult.ok) {
+        setRepairStatus({ 
+          active: true, 
+          message: repairResult.fixes.length > 0 ? `完美修复：${repairResult.fixes.join(" / ")}` : "代码很健康，已帮你重新格式化。", 
+          success: true 
+        });
+        runTransform(activeMode, repairResult.repaired);
+      } else {
+        setRepairStatus({ 
+          active: true, 
+          message: `部分修复成功但仍有错误 (${repairResult.error})。已为您执行：${repairResult.fixes.join(" / ")}。`, 
+          success: false 
+        });
+        // Still try to run transform to trigger the standard error display
+        runTransform(activeMode, repairResult.repaired);
+      }
+      
+      setTimeout(() => setRepairStatus(null), 5000);
+    });
   };
 
   const handleCopy = async (text: string, token: string, message: string) => {
@@ -425,6 +527,28 @@ export function JsonStudio() {
     });
   };
 
+  const handleResizePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsResizing(true);
+  };
+
+  const handleResizePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isResizing) return;
+    const container = event.currentTarget.parentElement;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const offsetX = event.clientX - rect.left;
+    let newWidth = (offsetX / rect.width) * 100;
+    if (newWidth < 20) newWidth = 20;
+    if (newWidth > 80) newWidth = 80;
+    setLeftWidthPercent(newWidth);
+  };
+
+  const handleResizePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    setIsResizing(false);
+  };
+
   return (
     <main className="pageShell">
       <div className="backgroundOrb orbOne" />
@@ -465,22 +589,26 @@ export function JsonStudio() {
           <span className="topNote">format · minify · inspect · copy</span>
         </div>
         <div className="topActions">
-          <div className="topPrimaryActions">
-            <ActionButton onClick={() => handleFormat()}>Format</ActionButton>
-            <ActionButton onClick={() => handleMinify()} tone="secondary">
-              Minify
-            </ActionButton>
-          </div>
           <Metrics result={result} />
         </div>
       </section>
 
-      <section className="workspaceGrid">
+      <section
+        className={`workspaceGrid ${isResizing ? "resizing" : ""}`}
+        style={leftWidthPercent ? { "--left-width": `${leftWidthPercent}%` } as CSSProperties: undefined}
+      >
         <article className="studioPanel inputPanel">
           <div className="panelHeader">
             <div className="panelTitle">
               <span className="cardKicker">Input</span>
-              <h2>RAW JSON</h2>
+              <ActionButton 
+                onClick={handleAutoFix} 
+                tone={repairStatus?.active && repairStatus.success ? "primary" : "ghost"} 
+                className={repairStatus?.active && repairStatus.success ? "success" : ""}
+                style={{ marginLeft: "12px" }}
+              >
+                Auto-Fix ✨
+              </ActionButton>
             </div>
           </div>
 
@@ -492,38 +620,60 @@ export function JsonStudio() {
             </div>
           </div>
 
-          <div className={`statusBar ${statusTone}`}>
-            <strong>{statusTitle}</strong>
-            <p>{statusBody}</p>
+          <div className={`statusBar ${repairStatus?.active ? (repairStatus.success ? "ok" : "error") : statusTone}`}>
+            <strong>{repairStatus?.active ? (repairStatus.success ? "魔术修复已执行" : "修复失败") : statusTitle}</strong>
+            <p>{repairStatus?.active ? repairStatus.message : statusBody}</p>
           </div>
 
           <div className="panelBody">
             <label className="editorShell">
-              <span className="editorHint">
+              <div className="editorHint">
                 Paste JSON here. Format 和 Minify 都只基于当前输入执行。
-              </span>
-              <textarea
-                className="editor"
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                    event.preventDefault();
-                    handleFormat();
-                  }
-                }}
-                placeholder='例如：{"team":"design","features":["format","copy"]}'
-                spellCheck={false}
-                value={input}
-              />
+              </div>
+              <div className="editorContainer">
+                <textarea
+                  ref={textareaRef}
+                  className="editor"
+                  onChange={(event) => setInput(event.target.value)}
+                  onScroll={handleScroll}
+                  onKeyDown={(event) => {
+                    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                      event.preventDefault();
+                      handleFormat();
+                    }
+                  }}
+                  placeholder='例如：{"team":"design","features":["format","copy"]}'
+                  spellCheck={false}
+                  value={input}
+                />
+                <pre ref={highlightRef} className="editorHighlight" aria-hidden="true">
+                  <code dangerouslySetInnerHTML={{ __html: highlightJsonSyntax(input) + (input.endsWith('\n') ? ' ' : '') }} />
+                </pre>
+              </div>
             </label>
           </div>
         </article>
+
+        <div
+          className={`resizer ${isResizing ? "resizing" : ""}`}
+          onPointerDown={handleResizePointerDown}
+          onPointerMove={handleResizePointerMove}
+          onPointerUp={handleResizePointerUp}
+          onPointerCancel={handleResizePointerUp}
+        >
+          <div className="resizerLine" />
+        </div>
 
         <article className="studioPanel outputPanel">
           <div className="panelHeader">
             <div className="panelTitle">
               <span className="cardKicker">Output</span>
-              <h2>{result?.mode === "minify" ? "MINIFIED RESULT" : "STRUCTURE VIEW"}</h2>
+              <div className="topPrimaryActions" style={{ marginLeft: "12px" }}>
+                <ActionButton onClick={() => handleFormat()} tone={activeMode === "format" ? "primary" : "ghost"}>Format</ActionButton>
+                <ActionButton onClick={() => handleMinify()} tone={activeMode === "minify" ? "primary" : "ghost"}>
+                  Minify
+                </ActionButton>
+              </div>
             </div>
             <div className="panelActions">
               <ActionButton onClick={expandAll} tone="ghost">
@@ -539,6 +689,7 @@ export function JsonStudio() {
                     : Promise.resolve()
                 }
                 tone="ghost"
+                className={copyState?.token === "copy:formatted" ? "success" : ""}
               >
                 {copyFormattedLabel}
               </ActionButton>
@@ -546,6 +697,7 @@ export function JsonStudio() {
                 <ActionButton
                   onClick={() => handleCopy(result.minified, "copy:minified", "已复制压缩")}
                   tone="secondary"
+                  className={copyState?.token === "copy:minified" ? "success" : ""}
                 >
                   {copyMinifiedLabel}
                 </ActionButton>
