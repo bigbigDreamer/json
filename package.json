@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "vitest run"
+    "test": "vitest run",
+    "tiger": "node scripts/cyber-tiger.mjs"
   },
   "dependencies": {
     "next": "^15.2.4",

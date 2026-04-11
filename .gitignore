@@ -9,3 +9,4 @@ build
 *.tmp
 *.swp
 *.tsbuildinfo
+.cyber-tiger-state.json
