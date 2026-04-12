@@ -323,6 +323,7 @@ export function JsonStudio() {
     originX: 0,
     originY: 0,
   });
+  const [activeTab, setActiveTab] = useState<"input" | "output">("input");
 
   const cleanedSummary = useMemo(() => {
     if (!result || result.cleaningDetails.length === 0) {
@@ -385,6 +386,10 @@ export function JsonStudio() {
       if (nextResult.ok) {
         setResult(nextResult);
         setError(null);
+        // Switch to output tab on mobile when successful
+        if (window.innerWidth <= 768) {
+          setActiveTab("output");
+        }
         return;
       }
 
@@ -466,6 +471,15 @@ export function JsonStudio() {
     const sample = createInvisibleCharacterSample();
     setInput(sample);
     handleFormat(sample);
+  };
+
+  const clearInput = () => {
+    setInput("");
+    setResult(null);
+    setError(null);
+    if (window.innerWidth <= 768) {
+      setActiveTab("input");
+    }
   };
 
   const togglePath = (path: string) => {
@@ -557,6 +571,37 @@ export function JsonStudio() {
       <div className="backgroundOrb orbTwo" />
       <div className="backgroundGrid" />
 
+      <div className="mobileBottomNav">
+        <button 
+          className={`navItem ${activeTab === "input" ? "active" : ""}`} 
+          onClick={() => setActiveTab("input")}
+        >
+          <div className="navIconWrapper">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v14"></path><path d="M5 10l7 7 7-7"></path></svg>
+          </div>
+          <span>EDITOR</span>
+        </button>
+        <button 
+          className={`navItem ${activeTab === "output" ? "active" : ""}`} 
+          onClick={() => setActiveTab("output")}
+        >
+          <div className="navIconWrapper">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+            {result && <span className="navDot" />}
+          </div>
+          <span>RESULT</span>
+        </button>
+      </div>
+
+      <div className="mobileStickyActions">
+        <button className="mobileActionBtn iconOnly" onClick={handleAutoFix} title="Auto Fix">✨</button>
+        <button className="mobileActionBtn primary" onClick={() => handleFormat()}>Format</button>
+        <button className="mobileActionBtn secondary" onClick={() => handleMinify()}>Minify</button>
+        <button className="mobileActionBtn iconOnly" onClick={clearInput} title="Clear">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      </div>
+
       <aside
         className={`floatingDock ${dockDrag.active ? "dragging" : ""}`}
         onPointerMove={handleDockPointerMove}
@@ -565,20 +610,18 @@ export function JsonStudio() {
         style={{ transform: `translate(${dockPosition.x}px, ${dockPosition.y}px)` }}
       >
         <div className="floatingDockHandle" onPointerDown={handleDockPointerDown} role="button" tabIndex={0}>
-          <span className="floatingDockTitle">Samples</span>
-          <span className="floatingDockHint">hover to expand</span>
+          <div className="dockIcon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+          </div>
+          <span className="floatingDockTitle">SAMPLES</span>
+          <span className="floatingDockHint">hover/tap</span>
         </div>
         <div className="floatingDockBody">
-          <p>
-            `Clean` 载入普通合法 JSON。
-            <br />
-            `Dirty` 载入带 BOM / 零宽字符的脏样例，用来验证清理链路。
-          </p>
           <div className="floatingDockActions">
-            <button className="sampleButton" onClick={loadSample} type="button">
+            <button className="sampleButton" onClick={() => { loadSample(); if(window.innerWidth <= 768) setActiveTab("input"); }} type="button">
               Clean
             </button>
-            <button className="sampleButton" onClick={loadInvisibleSample} type="button">
+            <button className="sampleButton" onClick={() => { loadInvisibleSample(); if(window.innerWidth <= 768) setActiveTab("input"); }} type="button">
               Dirty
             </button>
           </div>
@@ -587,8 +630,11 @@ export function JsonStudio() {
 
       <section className="topBar">
         <div className="brandBlock">
-          <span className="eyebrow">AURA / JSON WORKBENCH</span>
-          <span className="topNote">format · minify · inspect · copy</span>
+          <div className="brandLogo">
+            <div className="logoOrb" />
+            <span className="eyebrow">AURA</span>
+          </div>
+          <span className="topNote">JSON WORKBENCH</span>
         </div>
         <div className="topActions">
           <Metrics result={result} />
@@ -596,7 +642,7 @@ export function JsonStudio() {
       </section>
 
       <section
-        className={`workspaceGrid ${isResizing ? "resizing" : ""}`}
+        className={`workspaceGrid ${isResizing ? "resizing" : ""} mobile-tab-${activeTab}`}
         style={leftWidthPercent ? { "--left-width": `${leftWidthPercent}%` } as CSSProperties: undefined}
       >
         <article className="studioPanel inputPanel">
